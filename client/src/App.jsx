@@ -17,16 +17,15 @@ import {
   getProducts,
   createProduct,
   updateProduct,
-  deleteProduct as removeProduct,
+  deleteProduct as deleteProductAPI,
 } from "./api.js";
 
 export default function App() {
   const [products, setProducts] = useState([]);
   const [view, setView] = useState("gallery");
-  const [editingProduct, setEditingProduct] =
-    useState(null);
-  const [productToDelete, setProductToDelete] =
-    useState(null);
+
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [productToDelete, setProductToDelete] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -35,42 +34,41 @@ export default function App() {
   const [error, setError] = useState("");
   const [deleteError, setDeleteError] = useState("");
 
-  // LOAD PRODUCTS FROM MONGODB WHEN WEBSITE OPENS
+  // LOAD PRODUCTS FROM MONGODB
   useEffect(() => {
     let active = true;
 
-    getProducts()
-      .then((data) => {
+    async function loadProducts() {
+      try {
+        const data = await getProducts();
+
         if (active) {
           if (!Array.isArray(data)) {
-            throw new Error(
-              "The products API did not return a list."
-            );
+            throw new Error("Invalid product list.");
           }
 
           setProducts(data);
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         if (active) {
-          setError(
-            err.message || "Could not load products."
-          );
+          setError(err.message || "Could not load products.");
         }
-      })
-      .finally(() => {
+      } finally {
         if (active) {
           setLoading(false);
         }
-      });
+      }
+    }
+
+    loadProducts();
 
     return () => {
       active = false;
     };
   }, []);
 
-  // REFRESH PRODUCTS
-  async function refreshProducts() {
+  // RELOAD PRODUCTS
+  async function reloadProducts() {
     setLoading(true);
     setError("");
 
@@ -78,61 +76,64 @@ export default function App() {
       const data = await getProducts();
 
       if (!Array.isArray(data)) {
-        throw new Error(
-          "The products API did not return a list."
-        );
+        throw new Error("Invalid product list.");
       }
 
       setProducts(data);
     } catch (err) {
-      setError(
-        err.message || "Could not load products."
-      );
+      setError(err.message || "Could not load products.");
     } finally {
       setLoading(false);
     }
   }
 
-  // ADD OR UPDATE PRODUCT IN MONGODB
+  // ADD OR UPDATE PRODUCT
   async function saveProduct(data) {
-    const wasEditing = Boolean(editingProduct);
+    const isEditing = Boolean(editingProduct);
 
-    const saved = wasEditing
-      ? await updateProduct(
-          editingProduct._id,
-          data
-        )
+    const savedProduct = isEditing
+      ? await updateProduct(editingProduct._id, data)
       : await createProduct(data);
 
-    setProducts((current) =>
-      wasEditing
-        ? current.map((item) =>
-            item._id === saved._id ? saved : item
-          )
-        : [saved, ...current]
-    );
+    if (isEditing) {
+      setProducts((previous) =>
+        previous.map((product) =>
+          product._id === savedProduct._id
+            ? savedProduct
+            : product
+        )
+      );
+
+      setMessage("Product updated successfully!");
+    } else {
+      setProducts((previous) => [
+        savedProduct,
+        ...previous,
+      ]);
+
+      setMessage("Product added successfully!");
+    }
 
     setEditingProduct(null);
     setError("");
-
-    setMessage(
-      wasEditing
-        ? "Product updated successfully!"
-        : "Product added successfully!"
-    );
   }
 
-  // EDIT PRODUCT
-  function editProduct(product) {
+  // SELECT PRODUCT TO EDIT
+  function startEdit(product) {
     setEditingProduct(product);
-    setMessage("");
-    setError("");
     setView("manage");
+    setMessage("");
 
     window.scrollTo({
       top: 0,
       behavior: "smooth",
     });
+  }
+
+  // OPEN DELETE CONFIRMATION
+  function startDelete(product) {
+    setProductToDelete(product);
+    setDeleteError("");
   }
 
   // DELETE PRODUCT FROM MONGODB
@@ -143,19 +144,16 @@ export default function App() {
     setDeleteError("");
 
     try {
-      await removeProduct(productToDelete._id);
+      await deleteProductAPI(productToDelete._id);
 
-      setProducts((current) =>
-        current.filter(
-          (item) =>
-            item._id !== productToDelete._id
+      setProducts((previous) =>
+        previous.filter(
+          (product) =>
+            product._id !== productToDelete._id
         )
       );
 
-      if (
-        editingProduct?._id ===
-        productToDelete._id
-      ) {
+      if (editingProduct?._id === productToDelete._id) {
         setEditingProduct(null);
       }
 
@@ -171,19 +169,16 @@ export default function App() {
     }
   }
 
-  // CHANGE BETWEEN GALLERY AND MANAGE
+  // SWITCH BETWEEN GALLERY AND MANAGE
   function changeView(nextView) {
     setView(nextView);
     setMessage("");
   }
 
-  function askDelete(product) {
-    setProductToDelete(product);
-    setDeleteError("");
-  }
-
   return (
     <div className="flex min-h-screen flex-col">
+
+      {/* NAVIGATION */}
       <Navbar
         view={view}
         onChangeView={changeView}
@@ -212,27 +207,23 @@ export default function App() {
           </div>
         )}
 
-        {/* API ERROR MESSAGE */}
+        {/* ERROR MESSAGE */}
         {error && (
           <div
             role="alert"
-            className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-medium text-rose-700"
+            className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
           >
-            <span className="flex items-start gap-2">
-              <AlertCircle
-                className="mt-0.5 shrink-0"
-                size={18}
-              />
+            <span className="flex items-center gap-2">
+              <AlertCircle size={18} />
               {error}
             </span>
 
             <button
               type="button"
-              onClick={refreshProducts}
-              disabled={loading}
-              className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+              onClick={reloadProducts}
+              className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 font-semibold hover:bg-red-100"
             >
-              <RefreshCw size={14} />
+              <RefreshCw size={15} />
               Retry
             </button>
           </div>
@@ -242,30 +233,28 @@ export default function App() {
         {loading ? (
           <div className="flex items-center justify-center gap-3 rounded-2xl bg-white py-16 text-sm font-semibold text-slate-600">
             <LoaderCircle
-              className="animate-spin text-indigo-600"
               size={22}
+              className="animate-spin text-indigo-600"
             />
+
             Loading products from MongoDB...
           </div>
         ) : view === "gallery" ? (
           <GalleryPage
             products={products}
-            onManage={() =>
-              changeView("manage")
-            }
+            onManage={() => changeView("manage")}
           />
         ) : (
           <ManagePage
             products={products}
             editingProduct={editingProduct}
             onSave={saveProduct}
-            onCancel={() =>
-              setEditingProduct(null)
-            }
-            onEdit={editProduct}
-            onDelete={askDelete}
+            onCancel={() => setEditingProduct(null)}
+            onEdit={startEdit}
+            onDelete={startDelete}
           />
         )}
+
       </main>
 
       {/* FOOTER */}
@@ -273,39 +262,39 @@ export default function App() {
         Made by{" "}
         <strong className="text-slate-600">
           [Your Name]
-        </strong>{" "}
-        · [Section] · ShowCase Product Gallery
+        </strong>
+        {" "}· [Section] · ShowCase Product Gallery
       </footer>
 
-      {/* DELETE CONFIRMATION MODAL */}
+      {/* DELETE CONFIRMATION */}
       {productToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4">
           <div
             role="dialog"
             aria-modal="true"
-            aria-labelledby="delete-heading"
+            aria-labelledby="delete-title"
             className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"
           >
-            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-rose-100 text-rose-600">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-red-100 text-red-600">
               <Trash2 size={22} />
             </span>
 
             <h2
-              id="delete-heading"
-              className="mt-4 text-xl font-extrabold text-slate-900"
+              id="delete-title"
+              className="mt-4 text-xl font-bold text-slate-900"
             >
-              Delete this product?
+              Delete Product?
             </h2>
 
             <p className="mt-2 text-sm text-slate-500">
-              Remove “{productToDelete.name}”
-              from your MongoDB database?
+              Are you sure you want to delete{" "}
+              <strong>{productToDelete.name}</strong>?
             </p>
 
             {deleteError && (
               <p
                 role="alert"
-                className="mt-4 rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700"
+                className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700"
               >
                 {deleteError}
               </p>
@@ -315,10 +304,8 @@ export default function App() {
               <button
                 type="button"
                 disabled={deleting}
-                onClick={() =>
-                  setProductToDelete(null)
-                }
-                className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                onClick={() => setProductToDelete(null)}
+                className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600"
               >
                 Cancel
               </button>
@@ -327,23 +314,15 @@ export default function App() {
                 type="button"
                 disabled={deleting}
                 onClick={confirmDelete}
-                className="flex items-center gap-2 rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+                className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
               >
-                {deleting && (
-                  <LoaderCircle
-                    size={15}
-                    className="animate-spin"
-                  />
-                )}
-
-                {deleting
-                  ? "Deleting..."
-                  : "Delete product"}
+                {deleting ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }
