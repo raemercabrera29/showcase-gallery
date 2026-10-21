@@ -261,9 +261,9 @@ export default function App() {
       <footer className="border-t border-slate-200 bg-white px-5 py-5 text-center text-xs text-slate-400">
         Made by{" "}
         <strong className="text-slate-600">
-          [Your Name]
+          [John Raemer Cabrera]
         </strong>
-        {" "}· [Section] · ShowCase Product Gallery
+        {" "}· [INF239] · ShowCase Product Gallery
       </footer>
 
       {/* DELETE CONFIRMATION */}
